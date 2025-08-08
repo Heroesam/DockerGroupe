@@ -1,67 +1,64 @@
+version: '3.8'
+
 services:
-    waf-nginx:
-        build: ./config/waf
-        ports:
-            - "8080:80"
-        volumes:
-            - ./config/waf/nginx.conf:/etc/nginx/nginx.conf
-            - ./config/waf/modsecurity.conf:/etc/modsecurity/modsecurity.conf
-        depends_on:
-            - app
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - monitoring
 
-    traefik:
-        image: traefik:v2.10
-        command:
-            - "--api.insecure=true"
-            - "--providers.docker=true"
-        ports:
-            - "80:80"
-            - "8081:8080"
-        volumes:
-            - /var/run/docker.sock:/var/run/docker.sock
+  alertmanager:
+    image: prom/alertmanager
+    container_name: alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./config/alertmanager/config.yml:/etc/alertmanager/config.yml
+    networks:
+      - monitoring
 
-    suricata:
-        image: jasonish/suricata:latest
-        network_mode: "host"
-        volumes:
-            - ./config/ids/suricata.yaml:/etc/suricata/suricata.yaml
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - monitoring
 
-    wazuh:
-        image: wazuh/wazuh:latest
-        ports:
-            - "5601:5601"
-            - "1514:1514/udp"
-        environment:
-            - ELASTICSEARCH_HOST=elasticsearch
-        depends_on:
-            - elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.20
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+    ports:
+      - "9200:9200"
+    networks:
+      - monitoring
 
-    elasticsearch:
-        image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-        environment:
-            - discovery.type=single-node
-        ports:
-            - "9200:9200"
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.20
+    container_name: kibana
+    environment:
+      ELASTICSEARCH_HOSTS: "http://elasticsearch:9200"
+    ports:
+      - "5601:5601"
+    networks:
+      - monitoring
 
-    prometheus:
-        image: prom/prometheus:latest
-        ports:
-            - "9090:9090"
-        volumes:
-            - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+  node_exporter:
+    image: prom/node-exporter
+    container_name: node_exporter
+    ports:
+      - "9100:9100"
+    networks:
+      - monitoring
 
-    grafana:
-        image: grafana/grafana:latest
-        ports:
-            - "3000:3000"
-        volumes:
-            - ./config/prometheus/grafana.ini:/etc/grafana/grafana.ini
-        depends_on:
-            - prometheus
-
-    app:
-        image: nginx:alpine
-        ports:
-            - "8082:80"
-        volumes:
-            - ./config/waf/app.conf:/etc/nginx/conf.d/default.conf
+networks:
+  monitoring:
+    driver: bridge
