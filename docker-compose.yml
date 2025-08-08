@@ -2,22 +2,25 @@ services:
     waf-gateway:
         image: owasp/modsecurity-crs:nginx
         container_name: waf-gateway
-        depends_on: [ app ]
         restart: unless-stopped
         ports:
-            - "80:8080"
-            - "443:8443"  # HTTPS exposé sur le port standard 443
+            - "80:8080"     # HTTP exposé sur le port 80, redirigé vers 8080 dans le container
+            - "443:8443"    # HTTPS exposé sur le port 443, redirigé vers 8443 dans le container
         environment:
-            - BACKEND=http://n8n:5678
-            # - SERVER_NAME=mon-domaine.tld   # domaine
-            - BLOCKING_PARANOIA=4
-            - MODSEC_AUDIT_ENGINE=on
-            - SSL_CERT=/etc/nginx/certs/server.crt
+            - BACKEND=http://n8n:5678               # Ton backend en HTTP
+#            - SERVER_NAME=mon-domaine.tld   # domaine
+            - BLOCKING_PARANOIA=2
+#            - BLOCKING_INBOUND_ANOMALY_SCORE=10
+            - MODSEC_AUDIT_ENGINE=on                 # Activation audit logs
+            - SSL_CERT=/etc/nginx/certs/server.crt  # Certificat SSL
             - SSL_CERT_KEY=/etc/nginx/certs/server.key
-            - NGINX_ALWAYS_TLS_REDIRECT=on  # redirection HTTP → HTTPS
-        networks: [ backend ]
+            - NGINX_ALWAYS_TLS_REDIRECT=on           # Redirige HTTP vers HTTPS
+        networks:
+            - backend
         volumes:
-            - ./config/waf/certs:/etc/nginx/certs:ro
+            - ./config/waf/certs:/etc/nginx/certs:r
+            - ./config/waf/modsecurity.d/owasp-crs/custom_rules:/etc/modsecurity.d/custom_rules:ro
+
     n8n:
         image: n8nio/n8n:latest
         container_name: n8n
@@ -29,6 +32,7 @@ services:
             - DB_POSTGRESDB_USER=${N8N_POSTGRES_USER}
             - DB_POSTGRESDB_PASSWORD=${N8N_POSTGRES_PASSWORD}
             - N8N_BASIC_AUTH_ACTIVE=true
+            - N8N_RUNNERS_ENABLED=true
             - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
             - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
             - N8N_HOST=${N8N_HOST}
