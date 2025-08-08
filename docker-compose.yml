@@ -1,11 +1,4 @@
 services:
-    app:
-        image: nginxdemos/hello
-        container_name: app
-        restart: unless-stopped
-        networks: [ dmz ]
-        expose: [ "80" ]
-
     waf-gateway:
         image: owasp/modsecurity-crs:nginx
         container_name: waf-gateway
@@ -15,17 +8,65 @@ services:
             - "80:8080"
             - "443:8443"  # HTTPS exposé sur le port standard 443
         environment:
-            - BACKEND=http://app:80
-            - SERVER_NAME=mon-domaine.tld   # ton domaine
+            - BACKEND=http://n8n:5678
+            # - SERVER_NAME=mon-domaine.tld   # domaine
             - BLOCKING_PARANOIA=4
             - MODSEC_AUDIT_ENGINE=on
             - SSL_CERT=/etc/nginx/certs/server.crt
             - SSL_CERT_KEY=/etc/nginx/certs/server.key
             - NGINX_ALWAYS_TLS_REDIRECT=on  # redirection HTTP → HTTPS
-        networks: [ dmz ]
+        networks: [ backend ]
         volumes:
-            - ./config/waf/certs:/etc/nginx/certs:ro  # ton cert et clé en read-only
+            - ./config/waf/certs:/etc/nginx/certs:ro
+    n8n:
+        image: n8nio/n8n:latest
+        container_name: n8n
+        environment:
+            - DB_TYPE=postgresdb
+            - DB_POSTGRESDB_HOST=n8n-db
+            - DB_POSTGRESDB_PORT=5432
+            - DB_POSTGRESDB_DATABASE=${N8N_POSTGRES_DB}
+            - DB_POSTGRESDB_USER=${N8N_POSTGRES_USER}
+            - DB_POSTGRESDB_PASSWORD=${N8N_POSTGRES_PASSWORD}
+            - N8N_BASIC_AUTH_ACTIVE=true
+            - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+            - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+            - N8N_HOST=${N8N_HOST}
+            - N8N_PORT=${N8N_PORT}
+            - N8N_PROTOCOL=http
+            - N8N_SECURE_COOKIE=false  # A enlever quand HTTPS sera actif, voir avec Malo
+        ports:
+            - "5678:5678"
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.n8n.rule=Host(`${N8N_HOST}`)"
+            - "traefik.http.routers.n8n.entrypoints=web"
+            - "traefik.http.services.n8n.loadbalancer.server.port=${N8N_PORT}"
+        depends_on:
+            - n8n-db
+        networks:
+            - backend
+        restart: unless-stopped
 
+    n8n-db:
+        image: postgres:15
+        container_name: n8n-db
+        environment:
+            POSTGRES_DB: ${N8N_POSTGRES_DB}
+            POSTGRES_USER: ${N8N_POSTGRES_USER}
+            POSTGRES_PASSWORD: ${N8N_POSTGRES_PASSWORD}
+        volumes:
+            - n8n_db_data:/var/lib/postgresql/data
+        networks:
+            - backend
+
+    redis:
+        image: redis:alpine
+        container_name: n8n-redis
+        networks:
+            - backend
+
+volumes:
+    n8n_db_data:
 networks:
-    dmz:
-        driver: bridge
+  backend:
