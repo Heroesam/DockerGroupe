@@ -52,23 +52,53 @@ services:
             - backend
         restart: unless-stopped
 
-    n8n-db:
-        image: postgres:15
-        container_name: n8n-db
+    elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+        container_name: elasticsearch
         environment:
-            POSTGRES_DB: ${N8N_POSTGRES_DB}
-            POSTGRES_USER: ${N8N_POSTGRES_USER}
-            POSTGRES_PASSWORD: ${N8N_POSTGRES_PASSWORD}
+          - node.name=elasticsearch
+          - cluster.name=elk-cluster
+          - discovery.type=single-node
+          - bootstrap.memory_lock=true
+          - xpack.security.enabled=false
+          - xpack.security.transport.ssl.enabled=false
+          - ES_JAVA_OPTS=-Xms1g -Xmx1g
+        ulimits:
+          memlock:
+            soft: -1
+            hard: -1
         volumes:
-            - n8n_db_data:/var/lib/postgresql/data
+          - es-data:/usr/share/elasticsearch/data
+        ports:
+          - "9200:9200"
         networks:
-            - backend
+          - elk-net
 
-    redis:
-        image: redis:alpine
-        container_name: n8n-redis
+    logstash:
+        image: docker.elastic.co/logstash/logstash:8.13.4
+        container_name: logstash
+        volumes:
+          - ./config/SIEM/logstash/pipeline:/usr/share/logstash/pipeline
+        ports:
+          - "5044:5044"     # Beats
+          - "5000:5000/tcp" # TCP input
+          - "5000:5000/udp" # UDP input
+        depends_on:
+          - elasticsearch
         networks:
-            - backend
+          - elk-net
+
+    kibana:
+        image: docker.elastic.co/kibana/kibana:8.13.4
+        container_name: kibana
+        depends_on:
+          - elasticsearch
+        ports:
+          - "5601:5601"
+        environment:
+          - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+        networks:
+          - elk-net
 
     prometheus:
         image: prom/prometheus
@@ -94,6 +124,9 @@ services:
 
 volumes:
     n8n_db_data:
+    es-data:
     grafana_data:
+
 networks:
-  backend:
+    backend:
+    elk-net:
