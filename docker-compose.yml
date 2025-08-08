@@ -10,13 +10,20 @@ services:
             - app
 
     traefik:
-        image: traefik:v2.10
+        image: traefik:latest
         command:
             - "--api.insecure=true"
             - "--providers.docker=true"
+            - "--entrypoints.web.address=:80"
+            - "--api.insecure=true"
+            - "--providers.docker=true"
+            - "--entrypoints.web.address=:80"
+            - "--log.level=DEBUG"
         ports:
             - "80:80"
-            - "8081:8080"
+            - "8080:8080"
+        networks:
+            - traefik
         volumes:
             - /var/run/docker.sock:/var/run/docker.sock
 
