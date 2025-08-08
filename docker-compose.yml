@@ -8,9 +8,9 @@ services:
             - "443:8443"    # HTTPS exposé sur le port 443, redirigé vers 8443 dans le container
         environment:
             - BACKEND=http://n8n:5678               # Ton backend en HTTP
-#            - SERVER_NAME=mon-domaine.tld   # domaine
+            #            - SERVER_NAME=mon-domaine.tld   # domaine
             - BLOCKING_PARANOIA=2
-#            - BLOCKING_INBOUND_ANOMALY_SCORE=10
+            #            - BLOCKING_INBOUND_ANOMALY_SCORE=10
             - MODSEC_AUDIT_ENGINE=on                 # Activation audit logs
             - SSL_CERT=/etc/nginx/certs/server.crt  # Certificat SSL
             - SSL_CERT_KEY=/etc/nginx/certs/server.key
@@ -52,53 +52,71 @@ services:
             - backend
         restart: unless-stopped
 
+    n8n-db:
+        image: postgres:15
+        container_name: n8n-db
+        environment:
+            POSTGRES_DB: ${N8N_POSTGRES_DB}
+            POSTGRES_USER: ${N8N_POSTGRES_USER}
+            POSTGRES_PASSWORD: ${N8N_POSTGRES_PASSWORD}
+        volumes:
+            - n8n_db_data:/var/lib/postgresql/data
+        networks:
+            - backend
+
+    redis:
+        image: redis:alpine
+        container_name: n8n-redis
+        networks:
+            - backend
+
     elasticsearch:
         image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
         container_name: elasticsearch
         environment:
-          - node.name=elasticsearch
-          - cluster.name=elk-cluster
-          - discovery.type=single-node
-          - bootstrap.memory_lock=true
-          - xpack.security.enabled=false
-          - xpack.security.transport.ssl.enabled=false
-          - ES_JAVA_OPTS=-Xms1g -Xmx1g
+            - node.name=elasticsearch
+            - cluster.name=elk-cluster
+            - discovery.type=single-node
+            - bootstrap.memory_lock=true
+            - xpack.security.enabled=false
+            - xpack.security.transport.ssl.enabled=false
+            - ES_JAVA_OPTS=-Xms1g -Xmx1g
         ulimits:
-          memlock:
-            soft: -1
-            hard: -1
+            memlock:
+                soft: -1
+                hard: -1
         volumes:
-          - es-data:/usr/share/elasticsearch/data
+            - es-data:/usr/share/elasticsearch/data
         ports:
-          - "9200:9200"
+            - "9200:9200"
         networks:
-          - elk-net
+            - elk-net
 
     logstash:
         image: docker.elastic.co/logstash/logstash:8.13.4
         container_name: logstash
         volumes:
-          - ./config/SIEM/logstash/pipeline:/usr/share/logstash/pipeline
+            - ./config/SIEM/logstash/pipeline:/usr/share/logstash/pipeline
         ports:
-          - "5044:5044"     # Beats
-          - "5000:5000/tcp" # TCP input
-          - "5000:5000/udp" # UDP input
+            - "5044:5044"     # Beats
+            - "5000:5000/tcp" # TCP input
+            - "5000:5000/udp" # UDP input
         depends_on:
-          - elasticsearch
+            - elasticsearch
         networks:
-          - elk-net
+            - elk-net
 
     kibana:
         image: docker.elastic.co/kibana/kibana:8.13.4
         container_name: kibana
         depends_on:
-          - elasticsearch
+            - elasticsearch
         ports:
-          - "5601:5601"
+            - "5601:5601"
         environment:
-          - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+            - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
         networks:
-          - elk-net
+            - elk-net
 
     prometheus:
         image: prom/prometheus
