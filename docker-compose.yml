@@ -1,33 +1,31 @@
 services:
-    app: # Ceci de test, ici on mettra l'infrastructure
+    app:
         image: nginxdemos/hello
         container_name: app
         restart: unless-stopped
-        networks: [dmz]
-        expose: ["80"]
+        networks: [ dmz ]
+        expose: [ "80" ]
 
     waf-gateway:
         image: owasp/modsecurity-crs:nginx
         container_name: waf-gateway
-        depends_on: [app]
+        depends_on: [ app ]
         restart: unless-stopped
-        # L'image écoute par défaut sur 8080
         ports:
             - "80:8080"
-            # - "8443:8443"  # (optionnel) si tu ajoutes TLS ensuite
+            - "443:8443"  # HTTPS exposé sur le port standard 443
         environment:
-            # dit au WAF de proxy vers ton backend
             - BACKEND=http://app:80
-            - SERVER_NAME=localhost
-            # - PORT=8080        # inutile, 8080 est déjà le défaut
-            - BLOCKING_PARANOIA=4  # tuning CRS (ex: 1-4), optionnel
-            - MODSEC_AUDIT_ENGINE=on  # logs d'audit, optionnel
-        networks: [dmz]
-
+            - SERVER_NAME=mon-domaine.tld   # ton domaine
+            - BLOCKING_PARANOIA=4
+            - MODSEC_AUDIT_ENGINE=on
+            - SSL_CERT=/etc/nginx/certs/server.crt
+            - SSL_CERT_KEY=/etc/nginx/certs/server.key
+            - NGINX_ALWAYS_TLS_REDIRECT=on  # redirection HTTP → HTTPS
+        networks: [ dmz ]
+        volumes:
+            - ./config/waf/certs:/etc/nginx/certs:ro  # ton cert et clé en read-only
 
 networks:
     dmz:
         driver: bridge
-    traefik:
-        driver: bridge
-
