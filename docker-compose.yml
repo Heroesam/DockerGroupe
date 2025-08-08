@@ -70,7 +70,30 @@ services:
         networks:
             - backend
 
+    prometheus:
+        image: prom/prometheus
+        volumes:
+            - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+            - ./prometheus/data:/prometheus
+        ports:
+            - "9090:9090"
+        networks:
+            - backend
+
+    grafana:
+        image: grafana/grafana
+        ports:
+            - "3000:3000"
+        networks:
+            - backend
+        volumes:
+            - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+            - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+            - ./grafana/dashboards:/var/lib/grafana/dashboards
+            - grafana_data:/var/lib/grafana
+
 volumes:
     n8n_db_data:
+    grafana_data:
 networks:
   backend:
