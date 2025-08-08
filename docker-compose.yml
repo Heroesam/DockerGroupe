@@ -1,67 +1,53 @@
 services:
-    waf-nginx:
-        build: ./config/waf
-        ports:
-            - "8080:80"
-        volumes:
-            - ./config/waf/nginx.conf:/etc/nginx/nginx.conf
-            - ./config/waf/modsecurity.conf:/etc/modsecurity/modsecurity.conf
-        depends_on:
-            - app
-
-    traefik:
-        image: traefik:v2.10
-        command:
-            - "--api.insecure=true"
-            - "--providers.docker=true"
-        ports:
-            - "80:80"
-            - "8081:8080"
-        volumes:
-            - /var/run/docker.sock:/var/run/docker.sock
-
-    suricata:
-        image: jasonish/suricata:latest
-        network_mode: "host"
-        volumes:
-            - ./config/ids/suricata.yaml:/etc/suricata/suricata.yaml
-
-    wazuh:
-        image: wazuh/wazuh:latest
-        ports:
-            - "5601:5601"
-            - "1514:1514/udp"
+    n8n:
+        image: n8nio/n8n:latest
+        container_name: n8n
         environment:
-            - ELASTICSEARCH_HOST=elasticsearch
+            - DB_TYPE=postgresdb
+            - DB_POSTGRESDB_HOST=n8n-db
+            - DB_POSTGRESDB_PORT=5432
+            - DB_POSTGRESDB_DATABASE=${N8N_POSTGRES_DB}
+            - DB_POSTGRESDB_USER=${N8N_POSTGRES_USER}
+            - DB_POSTGRESDB_PASSWORD=${N8N_POSTGRES_PASSWORD}
+            - N8N_BASIC_AUTH_ACTIVE=true
+            - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+            - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+            - N8N_HOST=${N8N_HOST}
+            - N8N_PORT=${N8N_PORT}
+            - N8N_PROTOCOL=http
+            - N8N_SECURE_COOKIE=false  # A enlever quand HTTPS sera actif, voir avec Malo
+        ports:
+            - "5678:5678"
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.n8n.rule=Host(`${N8N_HOST}`)"
+            - "traefik.http.routers.n8n.entrypoints=web"
+            - "traefik.http.services.n8n.loadbalancer.server.port=${N8N_PORT}"
         depends_on:
-            - elasticsearch
+            - n8n-db
+        networks:
+            - backend
+        restart: unless-stopped
 
-    elasticsearch:
-        image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    n8n-db:
+        image: postgres:15
+        container_name: n8n-db
         environment:
-            - discovery.type=single-node
-        ports:
-            - "9200:9200"
-
-    prometheus:
-        image: prom/prometheus:latest
-        ports:
-            - "9090:9090"
+            POSTGRES_DB: ${N8N_POSTGRES_DB}
+            POSTGRES_USER: ${N8N_POSTGRES_USER}
+            POSTGRES_PASSWORD: ${N8N_POSTGRES_PASSWORD}
         volumes:
-            - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+            - n8n_db_data:/var/lib/postgresql/data
+        networks:
+            - backend
 
-    grafana:
-        image: grafana/grafana:latest
-        ports:
-            - "3000:3000"
-        volumes:
-            - ./config/prometheus/grafana.ini:/etc/grafana/grafana.ini
-        depends_on:
-            - prometheus
+    redis:
+        image: redis:alpine
+        container_name: n8n-redis
+        networks:
+            - backend
 
-    app:
-        image: nginx:alpine
-        ports:
-            - "8082:80"
-        volumes:
-            - ./config/waf/app.conf:/etc/nginx/conf.d/default.conf
+volumes:
+    n8n_db_data:
+networks:
+  backend:
